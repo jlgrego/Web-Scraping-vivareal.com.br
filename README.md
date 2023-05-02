@@ -4,9 +4,11 @@
 
 # Sobre o projeto
 
-Repositório que compõem uma parte do meu projeto de conclusão de curso no MBA em Data Science e Analytics pela USP/Esalq, previsto para junho de 2023. 
+Repositório que compõem uma parte do meu projeto de conclusão de curso no MBA em Data Science e Analytics pela USP/Esalq, previsto para junho de 2023. O trabalho tem por objetivo mostrar como a ciência de dados, fazendo uso da linguagem de programação R, pode contribuir com os profissionais avaliadores de imóveis que atuam na cidade de São Paulo, evidenciando o poder que a ferramenta possui quando comparada aos softwares mais comuns voltados para o mercado imobiliário.
 
-Em suma, o código permite, dentre outras coisas:
+O projeto completo conta ainda com o script desenvolvido para coleta dos dados num site especializado em anúncios imobiliários; data wrangling completa da base; geocodificação com API Google Maps; modelo de machine learning e diagnóstico do modelo. Estes serão incluídos em breve neste repositório.
+
+O código disponibilizado até aqui permite, dentre outras coisas:
 
 ### a) Impacto da distância para o metrô sobre os valores dos imóveis. 
 
@@ -58,20 +60,19 @@ Cabe ressaltar que esta é uma análise preliminar, devendo ser agregada com uma
 
 ## analise_sp.R
 
-Script geral
+Script geral.
 
 ## dados_sp.xlsx
 
-Em breve complementarei esse repositório com o script de web scraping, 100% em linguagem R, criado para coleta dos 2.500 dados analisados e que estão à venda num site especializado em anúncios imobiliários. O projeto vai conter, também, como se deu a geocodificação desses imóveis e um modelo supervisionado para estimação dos valores.  
+Base de dados analisada.  
 
 ## idh_sp
 
-Base obtida no site https://geosampa.prefeitura.sp.gov.br/PaginasPublicas/_SBC.aspx, utilizada para coleta de índices socioeconômicos do município de São Paulo - SP. 
+Base obtida no site https://geosampa.prefeitura.sp.gov.br/PaginasPublicas/_SBC.aspx, utilizada para coleta de índices socioeconômicos do município de São Paulo - SP.
 
 ## shapefile_municipio
 
-Arquivo shapefile do município de São Paulo - SP, também obtido no site https://geosampa.prefeitura.sp.gov.br/PaginasPublicas/_SBC.aspx
-, sendo essencial para as análises espaciais.
+Arquivo shapefile do município de São Paulo - SP, também obtido no site https://geosampa.prefeitura.sp.gov.br/PaginasPublicas/_SBC.aspx, sendo essencial para as análises espaciais.
 
 ## metro
 
