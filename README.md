@@ -1,5 +1,9 @@
 # Análises espaciais sobre o mercado imobiliário de São Paulo - SP
 
+
+![Mapa geral](https://github.com/jlgrego/imoveis_sp/blob/main/assets/valores%20unitarios.PNG)
+
+
 # Sobre o projeto
 
 Repositório que compõem uma parte do meu projeto de conclusão de curso no MBA em Data Science e Analytics pela USP/Esalq, previsto para junho de 2023. 
