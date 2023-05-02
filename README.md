@@ -12,13 +12,15 @@ Em suma, o código permite, dentre outras coisas:
 
 a) Entender aspectos espaciais do mercado imobiliário de apartamentos em São Paulo
 
-b) Qual a estação de metrô mais proxi de cada imóvel
+b) Qual a estação de metrô mais próxima de cada imóvel
 
 c) Quais as médias de valores das ofertas de apartamentos por bairro
 
 d) Qual a média dos valores unitários dos imóveis em relação a uma determinada estação ou linha do metrô
 
 e) Relação dos valores dos imóveis e os índices econômicos de cada bairro
+
+![Índices econômicos](https://github.com/jlgrego/imoveis_sp/blob/main/assets/unit_bairros.png)
 
 # Sobre os arquivos
 
