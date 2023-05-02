@@ -6,7 +6,7 @@
 #carregando pacotes utilizados
 pacotes <- c( "rgdal","dplyr", "sf", "tmap", "plotly",
               "ggplot2", "cowplot", "tibble", "stringi",
-              "corrplot", "metan", "readxl")
+              "corrplot", "metan", "readxl", "spdep")
 
 
 options(rgl.debug = TRUE)
@@ -516,21 +516,7 @@ sf_aptos_utm <- st_as_sf(x = dados_utm,
 #transformando novamente em simple feature WGS 
 sf_aptos_geod <- sf_aptos_utm %>% st_transform(CRS("+proj=longlat"))
 
-#médias dos unitários por distâncias máximas até metrô
-mean_geral_metro <- sf_aptos_geod %>% group_by(linha_prox) %>% 
-  summarise(media = mean(unit))
-
-dist_500 <- sf_aptos_geod %>% filter(dist <= 500) %>% group_by(linha_prox) %>% 
-  summarise(media_500 = mean(unit)) 
-
-dist_500_1500 <- sf_aptos_geod %>% filter(dist > 500 & dist <= 1500) %>% group_by(linha_prox) %>% 
-  summarise(media_500_1500 = mean(unit)) 
-
-dist_maior_1500 <- sf_aptos_geod %>% filter(dist > 1500) %>% group_by(linha_prox) %>% 
-  summarise(media_1500 = mean(unit))
-
-
-#Plotando médias de valores unitários por distâncias até metrô:
+#Plotando pontos mais próximos de cada linha do metrô:
 
 #Geral
 dist_geral <- ggplot(sf_aptos_geod) +
@@ -655,3 +641,90 @@ tm_shape(shp = sf_shp) +
           title = "Linha do metrô",
           popup.vars = c("Linha" = "emt_linha", 
                          "Estação" = "emt_nome")) 
+
+###############################################################################
+#    Diagnóstico de Autocorrelação Espacial Global - Estatística I de Moran   #                         #
+###############################################################################
+
+#levando a variável "média" para o shapefile
+shp_long_lat@data$media <- sf_shp$media
+
+#Verificando bairros com NAs
+shp_long_lat@data[!complete.cases(shp_long_lat@data),]
+
+#Função para excluir dados faltantes do shapefile
+moran.na.omit <- function(x, margin=1) {
+  if (!inherits(x, "SpatialPointsDataFrame") & !inherits(x, "SpatialPolygonsDataFrame")) 
+    stop("MUST BE sp SpatialPointsDataFrame OR SpatialPolygonsDataFrame CLASS OBJECT") 
+  na.index <- unique(as.data.frame(which(is.na(x@data),arr.ind=TRUE))[,margin])
+  if(margin == 1) {  
+    cat("Linhas excluídas: ", na.index, "\n") 
+    return( x[-na.index,]  ) 
+  }
+  if(margin == 2) {  
+    cat("Colunas excluídas: ", na.index, "\n") 
+    return( x[,-na.index]  ) 
+  }
+}
+
+#Removendo os bairros a partir da função sp.na.omit
+shp_moran_test <- moran.na.omit(shp_long_lat)
+
+#Estabelecendo vizinhanças por contiguidade, critério queen:
+vizinhos_queen <- poly2nb(pl = shp_moran_test,
+                          queen = TRUE,
+                          row.names = shp_moran_test@data$NOME_DIST)
+
+# Informações relevantes sobre a vizinhança queen estabelecida:
+summary(vizinhos_queen)
+
+#Matriz W?
+matrizW_queen <- nb2mat(neighbours = vizinhos_queen,
+                        style = "B")
+
+#Para facilitar o estudo da matriz W:
+colnames(matrizW_queen) <- shp_moran_test@data$NOME_DIST
+listw_queen <- mat2listw(matrizW_queen)
+class(listw_queen)
+
+#Aplicando teste de Moran
+moran.test(x = shp_moran_test@data$media, 
+           listw = listw_queen, 
+           zero.policy = TRUE)
+
+
+#Diagrama da Estatística I de Moran 
+moran.plot(x = shp_moran_test@data$media, 
+           listw = listw_queen, 
+           zero.policy = TRUE,
+           xlab = "Valor unitário médio", 
+           ylab = "Valor unitário médio Espacialmente Defasado",
+           pch = 15)
+
+#Outra forma de plotar o diagrama de Moran
+vetor_unit <- shp_moran_test@data$media
+
+wunit <- lag.listw(x = listw_queen,
+                   var = shp_moran_test@data$media,
+                   zero.policy = TRUE)
+
+base_moran <- data.frame(bairro = shp_moran_test@data$NOME_DIST,
+                         media_unit = vetor_unit,
+                         wunit)
+
+#Plotagem
+ggplotly(
+  base_moran %>% 
+    ggplot(aes(label = bairro)) +
+    geom_point(aes(x = media_unit, y = wunit)) +
+    geom_text(aes(x = media_unit, y = wunit, label = bairro), size = 2.4, nudge_y = 800) +
+    geom_smooth(aes(x = media_unit, y = wunit), method = "lm", se = F) +
+    geom_hline(yintercept = mean(base_moran$wunit), lty = 2) +
+    geom_vline(xintercept = mean(base_moran$media_unit), lty = 2) +
+    labs(x = "Valor unitário médio (R$/m²)", y = "Valor unitário defasado", title = "Diagrama de Moran") +
+    annotate("text", x = 3200, y = 80000, label = "Low-High", col = "#0C4C8A") +
+    annotate("text", x = 3200, y = 3000, label = "Low-Low", col = "#0C4C8A" ) +
+    annotate("text", x = 14000, y = 80000, label = "High-High", col = "#0C4C8A") +
+    annotate("text", x = 14000, y = 3000, label = "High-Low", col = "#0C4C8A") +
+    theme_grey()
+) 
