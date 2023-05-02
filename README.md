@@ -1,7 +1,7 @@
 # Análises espaciais sobre o mercado imobiliário de São Paulo - SP
 
 
-![Mapa geral](https://github.com/jlgrego/imoveis_sp/blob/main/assets/valores%20unitarios.PNG)
+![Mapa geral](https://github.com/jlgrego/imoveis_sp/blob/main/assets/unit_bairros.png)
 
 
 # Sobre o projeto
