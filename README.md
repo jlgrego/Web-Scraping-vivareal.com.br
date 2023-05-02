@@ -8,7 +8,7 @@ Repositório que compõem uma parte do meu projeto de conclusão de curso no MBA
 
 Em suma, o código permite, dentre outras coisas:
 
-a) Impacto da distância para o metrô sobre os valores dos imóveis. 
+### a) Impacto da distância para o metrô sobre os valores dos imóveis. 
 
 ![distancia_versus_unitario](https://github.com/jlgrego/imoveis_sp/blob/main/assets/dist_versus_unitario.png)
 
@@ -16,19 +16,19 @@ Foi possivel perceber, por exemplo, que a queda dos valores é mais acentuada pa
 
 O script possui também as análises por linha do metrô.
 
-b) Qual a estação de metrô mais próxima de cada imóvel
+### b) Qual a estação de metrô mais próxima de cada imóvel
 
 ![base de dados](https://github.com/jlgrego/imoveis_sp/blob/main/assets/dados.png)
 
 Essa análise pode ser muito útil, por exemplo, para verificar a média de preços praticados num raio de distância para determinada estação ou grupo delas. 
 
-c) Quais as médias de valores das ofertas de apartamentos por bairro e zonas
+### c) Quais as médias de valores das ofertas de apartamentos por bairro e zonas
 
 ![medias_bairros](https://github.com/jlgrego/imoveis_sp/blob/main/assets/medias_bairros.png)
 
 Nesse caso foi possível analisar os bairros que registram as maiores e menores médias de valores. As zonas sul e oeste detém juntas, 4 dos 5 bairros com os valores mais altos, enquanto que a zona leste, sozinha, detém a mesma proporção,só que dos menores valores. 
 
-d) Relação dos valores dos imóveis e os índices econômicos de cada bairro
+### d) Relação dos valores dos imóveis e os índices econômicos de cada bairro
 
 ![indices economicos](https://github.com/jlgrego/imoveis_sp/blob/main/assets/valor%20e%20indices.PNG)
 
@@ -38,7 +38,7 @@ A matriz de correlações corrobora a percepção
 
 ![matriz_correlacoes](https://github.com/jlgrego/imoveis_sp/blob/main/assets/correlacoes.PNG)
 
-e) Cálculo da estatística I de Moran para detecção de autocorrelação espacial
+### e) Cálculo da estatística I de Moran para detecção de autocorrelação espacial
 
 ![estatistica_moran](https://github.com/jlgrego/imoveis_sp/blob/main/assets/moran_teste.png)
 
@@ -47,6 +47,12 @@ Foi calculado, também, a estatística I de Moran. No caso em questão, esta foi
 ![moran_diagrama](https://github.com/jlgrego/imoveis_sp/blob/main/assets/diagrama_moran.png)
 
 A partir dela, foi possível a construção do diagrama de Moran. Nele, os dados são distribuídos em quatro quadrantes: Alto-Alto ou “High-High”, que são dados com altos valores próximos a dados com altos valores; Baixo-Baixo ou “Low-Low”, que são dados com baixos valores próximos a dados com baixos valores; Baixo-Alto ou “Low-High”, que são dados com baixos valores próximos a dados com altos valores e Alto-Baixo ou “High-Low”, que são dados com altos valores próximos a dados com baixos valores. 
+
+O diagrama pode ser útil, por exemplo, para auxiliar políticas públicas de investimento em infraestrutura e equipamentos urbanos.
+
+Pode também auxiliar investidores, uma vez que detecta regiões, atualmente, com valores baixos e cercados de altos valores, ou seja, estão no quadrante "Low-High". Considerando um potencial efeito de transbordo futuro, essas regiões podem vir a serem impactadas positivamente pelos bairros vizinhos e, consequentemente, uma valorização dos imóveis ali situados. 
+
+Cabe ressaltar que esta é uma análise preliminar, devendo ser agregada com uma maior quantidade de variáveis, uma vez que o mercado imobiliário de São Paulo é complexo em muitas regiões. 
 
 # Sobre os arquivos
 
