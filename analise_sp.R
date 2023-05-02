@@ -6,7 +6,7 @@
 #carregando pacotes utilizados
 pacotes <- c( "rgdal","dplyr", "sf", "tmap", "plotly",
               "ggplot2", "cowplot", "tibble", "stringi",
-              "corrplot", "metan", "readxl", "spdep")
+              "corrplot", "metan", "readxl", "spdep", "kableExtra")
 
 
 options(rgl.debug = TRUE)
