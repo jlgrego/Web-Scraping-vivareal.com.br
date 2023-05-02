@@ -6,7 +6,7 @@
 #carregando pacotes utilizados
 pacotes <- c( "rgdal","dplyr", "sf", "tmap", "plotly",
               "ggplot2", "cowplot", "tibble", "stringi",
-              "coor_plot", "metan")
+              "corrplot", "metan", "readxl")
 
 
 options(rgl.debug = TRUE)
@@ -338,9 +338,11 @@ df_tops <- rbind(top_5, bottom_5)
 
 #Plotando os resultados
 
-ggplot(df_tops, aes(x = reorder(NOME_DIST, -media), y = media,fill = zona, label = round(media))) +
-  geom_bar(stat = "identity", position = "dodge",) +
-  geom_text(size = 5, position = position_stack(vjust = 1.04)) +
+ggplot(df_tops, aes(x = reorder(NOME_DIST, -media), y = media, fill = zona)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_label(aes(x= NOME_DIST, label = round(media,0)),
+             show.legend = F,
+             fill = "white") +
   labs(title = "Bairros com os maiores e menores valores unitários médios por m² em São Paulo", 
        x = "Bairro", y = "Valor Unitário (R$/m²)", fill = "Região")
 
