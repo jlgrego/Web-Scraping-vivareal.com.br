@@ -18,7 +18,7 @@ O script possui também as análises por linha do metrô.
 
 b) Qual a estação de metrô mais próxima de cada imóvel
 
-![base de dados]()
+![base de dados](https://github.com/jlgrego/imoveis_sp/blob/main/assets/dados.png)
 
 Essa análise pode ser muito útil, por exemplo, para verificar a média de preços praticados num raio de distância para determinada estação ou grupo delas. 
 
@@ -36,15 +36,15 @@ Os mapas deixem evidente a correlação que existe entre os preços praticados e
 
 A matriz de correlações corrobora a percepção
 
-![matriz_correlacoes]()
+![matriz_correlacoes](https://github.com/jlgrego/imoveis_sp/blob/main/assets/correlacoes.PNG)
 
 e) Cálculo da estatística I de Moran para detecção de autocorrelação espacial
 
-![estatistica_moran]()
+![estatistica_moran](https://github.com/jlgrego/imoveis_sp/blob/main/assets/moran_teste.png)
 
 Foi calculado, também, a estatística I de Moran. No caso em questão, esta foi positiva e estatisticamente significante ao nível de 5%, concluindo que os dados sofrem de um efeito de transbordo, o chamado "spillover", que ocorre quando os dados são cercados de vizinhos similares.
 
-![moran_diagrama]()
+![moran_diagrama](https://github.com/jlgrego/imoveis_sp/blob/main/assets/diagrama_moran.png)
 
 A partir dela, foi possível a construção do diagrama de Moran. Nele, os dados são distribuídos em quatro quadrantes: Alto-Alto ou “High-High”, que são dados com altos valores próximos a dados com altos valores; Baixo-Baixo ou “Low-Low”, que são dados com baixos valores próximos a dados com baixos valores; Baixo-Alto ou “Low-High”, que são dados com baixos valores próximos a dados com altos valores e Alto-Baixo ou “High-Low”, que são dados com altos valores próximos a dados com baixos valores. 
 
