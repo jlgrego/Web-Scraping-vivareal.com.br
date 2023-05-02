@@ -10,17 +10,21 @@ Repositório que compõem uma parte do meu projeto de conclusão de curso no MBA
 
 Em suma, o código permite, dentre outras coisas:
 
-a) Entender aspectos espaciais do mercado imobiliário de apartamentos em São Paulo
+a) Impacto da distância ao metrô sobre os valores dos imóveis
+
+![distancia_versus_unitario](https://github.com/jlgrego/imoveis_sp/blob/main/assets/dist_versus_unitario.png)
 
 b) Qual a estação de metrô mais próxima de cada imóvel
 
-c) Quais as médias de valores das ofertas de apartamentos por bairro
+c) Quais as médias de valores das ofertas de apartamentos por bairro e zonas
+
+![medias_bairros](https://github.com/jlgrego/imoveis_sp/blob/main/assets/medias_bairros.png)
 
 d) Qual a média dos valores unitários dos imóveis em relação a uma determinada estação ou linha do metrô
 
 e) Relação dos valores dos imóveis e os índices econômicos de cada bairro
 
-![Índices econômicos](https://github.com/jlgrego/imoveis_sp/blob/main/assets/unit_bairros.png)
+![Índices econômicos](https://github.com/jlgrego/imoveis_sp/blob/main/assets/valor%20e%20indices.PNG)
 
 # Sobre os arquivos
 
