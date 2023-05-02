@@ -351,6 +351,7 @@ ggplot(df_tops, aes(x = reorder(NOME_DIST, -media), y = media, fill = zona)) +
 #Unitário
 unit_plot <- tm_shape(shp = sf_shp) + 
   tm_borders(alpha = 0.4) +
+  tm_text("NOME_DIST", size = 0.3) +
   tm_fill(col = "media",
           title = "Valor Unitário médio (R$/m²)",alpha = 0.9,
           popup.vars = c("Bairro" = "NOME_DIST", 
