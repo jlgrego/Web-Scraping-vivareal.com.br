@@ -1,12 +1,12 @@
 # Análises espaciais sobre o mercado imobiliário de São Paulo - SP
 
-## analise_sp.R
+# Sobre o projeto
 
-Script que compõem uma parte do meu projeto de conclusão de curso no MBA em Data Science e Analytics pela USP/Esalq, previsto para junho de 2023. 
+Repositório que compõem uma parte do meu projeto de conclusão de curso no MBA em Data Science e Analytics pela USP/Esalq, previsto para junho de 2023. 
 
 Em suma, o código permite, dentre outras coisas:
 
-a) Entender  aspectos espaciais do mercado imobiliário de apartamentos em São Paulo
+a) Entender aspectos espaciais do mercado imobiliário de apartamentos em São Paulo
 
 b) Qual a estação de metrô mais proxi de cada imóvel
 
@@ -15,6 +15,12 @@ c) Quais as médias de valores das ofertas de apartamentos por bairro
 d) Qual a média dos valores unitários dos imóveis em relação a uma determinada estação ou linha do metrô
 
 e) Relação dos valores dos imóveis e os índices econômicos de cada bairro
+
+# Sobre os arquivos
+
+## analise_sp.R
+
+Script geral
 
 ## dados_sp.xlsx
 
