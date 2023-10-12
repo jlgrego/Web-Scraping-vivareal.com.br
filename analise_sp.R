@@ -1,12 +1,17 @@
 #' ---
-#' title: "Relação do mercado imobiliário e índices socioeconômicos em São Paulo - SP"
+#' title: "Linguagem R para avaliação de mercado de apartamentos em São Paulo – SP - Tcc - Usp/Esalq"
 #' author: "José Luiz Grego"
 #' ---
 
 #carregando pacotes utilizados
-pacotes <- c( "rgdal","dplyr", "sf", "tmap", "plotly",
-              "ggplot2", "cowplot", "tibble", "stringi",
-              "corrplot", "metan", "readxl", "spdep", "kableExtra")
+pacotes <- c("httr","rvest","jsonlite", "tidyr", "dplyr", "stringr", "ggmap",
+             "mapview","rgdal","tmap","maptools","sf","rgeos","sp","adehabitatHR",
+             "rayshader","knitr","kableExtra","RColorBrewer","profvis", "ggrepel",
+             "plotly", "spdep", "neuralnet","leaflet", "leafgl", "leafpop", "rstatix",
+             "readr", "tinytex", "tibble", "stringi", "Hmisc", "data.table", 
+             "PerformanceAnalytics", "equatiomatic", "cowplot", "nortest", "car", "readxl",
+             "stargazer", "see", "ggraph", "metan", "gridExtra", "grid", "graphics",
+             "plyr", "openxlsx", "olsrr")
 
 
 options(rgl.debug = TRUE)
@@ -28,20 +33,21 @@ if(sum(as.numeric(!pacotes %in% installed.packages())) != 0){
 #Shapefile do município de São Paulo - SP. Fonte: Geosampa.
 shp_saopaulo <- readOGR("shapefile_municipio", "municipio_sp")
 
-#Transformando o shapefile para o Datum WGS84:
+#Transformando o shapefile para o Datum WGS84
 shp_long_lat <- spTransform(shp_saopaulo, CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")) 
 
-#Transformando o shapefile em um objeto simplefeature: 
+#Transformando o shapefile em um objeto simplefeature 
 sf_shp <- spTransform(shp_long_lat, CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")) %>% 
   sf::st_as_sf()
 
-#Alterando nome dos bairros para realização de join posterior
+#Nomes dos bairros em letras minúsculas
 sf_shp <- sf_shp %>% mutate(NOME_DIST = gsub(" ", "-", sf_shp$NOME_DIST) %>% tolower())
 
-#Base de dados com índices sociais e econômicos por distrito de São Paulo. Fonte: Geosampa
+#Base de dados com índices sociais e econômicos por distrito de São Paulo, que será utilizado
+#como auxiliar para obter as regiões de pesquisa dos dados. Fonte: Geosampa
 idh_sp <- read_excel("idh_sp.xls", sheet = "dados")
 
-#carregando objeto sp do metrô de São Paulo          
+#carregando sp do metro          
 sp_metro_utm <- readOGR("metro", "metro_sp", use_iconv = TRUE, encoding = "UTF-8")
 
 #alterando datum para utm
@@ -55,7 +61,7 @@ sp_metro_geod <- spTransform(x = sp_metro_utm,
 regioes <- data.frame("distrito" = idh_sp$DISTRITO,
                       "zona" = idh_sp$REGIAO8)
 
-#Modificando o nome das regiões para análises posteriores
+#Modificando o nome das regiões conforme padrão de pesquisa no site Viva Real:
 regioes <- regioes %>% mutate(distrito = stringi::stri_trans_general(str = distrito, id = "Latin-ASCII") %>% tolower(),
                               zona = gsub("[0-9]", "", regioes$zona) %>% tolower()) %>% 
   mutate(zona = gsub("leste", "zona-leste", zona),
@@ -71,16 +77,178 @@ regioes <- regioes[!duplicated(regioes[c(1:2)]),]
 #Removendo bairros que não foram localizados no site Viva Real com o padrão adotado:
 regioes <- subset(regioes,!grepl(c("carrao|morumbi|cachoeirinha|jaguara|pari|marsilac|perus|jardim-paulista|itaim-bibi|sao-domingos|sao-rafael|iguatemi|sao-miguel|cambuci"), regioes$distrito))
 
-#Carregando base de dados de imóveis:
-dados_sp_pt <- read_excel("dados_sp.xlsx")
-
-
 ################################################################################
-#                     Análises exploratória e espacial                         #
+#                              Web Scraping                                    #
 ################################################################################
 
-#Variáveis categóricas em factor
-dados_sp_pt[, 10:12] <- lapply(dados_sp_pt[,10:12], as.factor)
+#data set para armazenar os links capturados:
+base_links <- data.frame()
+i <- 1
+set.seed(36666)
+
+#link raiz de onde se iniciará a análise:
+link_geral <- paste("https://www.vivareal.com.br/venda/sp/sao-paulo/",regioes[i,2],"/",regioes[i,1],"/apartamento_residencial/", sep = "")
+
+#Instalar a extensão "SelectorGadget" no google chrome  para obter os "nós" dos
+#campos de variáveis desejadas
+
+#Fazendo a busca de links por bairros do município:
+for (regiao in 1:length(regioes$distrito)){
+  Sys.sleep(4)
+  #lendo o link
+  page_anuncio <- read_html(link_geral)
+  
+  #capturando somente os sufixos de links de anúncios:
+  link_anuncio <- page_anuncio %>% html_nodes("a") %>% html_attr("href") %>% 
+    grep('/imovel/apartamento', ., value = TRUE) %>% unique() 
+  
+  #colando o prefixo comum aos links:
+  link_anuncio <- paste("https://www.vivareal.com.br", link_anuncio, sep = "")
+  
+  #Armazenando os dados do loop e mudando contador
+  base_links <- rbind(base_links, data.frame(link_anuncio))
+  print(link_geral)
+  i <- i + 1
+  link_geral <- paste("https://www.vivareal.com.br/venda/sp/sao-paulo/",regioes[i,2],"/",regioes[i,1],"/apartamento_residencial/", sep = "")
+}
+
+#Removendo links duplicados
+base_links_unique <- unique(base_links)
+
+#Inicicar o scraping por página:
+link <- (base_links[1,])
+
+#Base de dados para armazenar as variáveis coletadas:
+dados <- data.frame()
+
+#Looping:
+for (pagina in 1:length(base_links$link_anuncio)){
+  
+  #ler o link:
+  page <- read_html(link)
+  
+  #capturando as features:
+  endereco <- page %>% 
+    html_node(".js-address") %>% 
+    html_text() 
+  
+  valor_total <- page %>% 
+    html_node(".js-price-sale") %>% 
+    html_text()
+  
+  area_util <-  page %>% 
+    html_node(".js-area") %>% 
+    html_text()
+  
+  condominio <- page %>%
+    html_node(".js-condominium") %>% 
+    html_text()
+  
+  quartos <- page %>%
+    html_node(".js-bedrooms") %>% 
+    html_text()
+  
+  banheiros_suites <- page %>%
+    html_node(".js-bathrooms") %>% 
+    html_text()
+  
+  vagas <- page %>%
+    html_node(".js-parking") %>% 
+    html_text()
+  
+  #coluna para capturar equipamentos do imóvel (piscina, quadra, salão de festas etc.)
+  descricao <- page %>%
+    html_node(".description__text") %>% 
+    html_text()
+  
+  #Armazenando os dados do loop e mudando contador
+  dados <- rbind(dados, data.frame(endereco, valor_total, area_util, quartos, banheiros_suites, vagas, descricao, condominio,link))
+  link <- (base_links[1+pagina,])
+  print(link)
+  print(pagina)
+  Sys.sleep(5)
+}
+
+#Limpando espaços, caracteres não utilizados das variáveis e alterando
+#os tipos, quando pertinente:
+
+#Valor total do imóvel
+dados$valor_total <-  gsub("[^[:digit:]]", "", dados$valor_total) %>% as.numeric
+
+#Valor do condompinio:
+dados$condominio <- gsub("[^[:digit:]]", "", dados$condominio) %>% as.numeric
+
+#Área útil do imóvel:
+dados$area_util <-  gsub("[^[:digit:]]", "", dados$area_util) %>% as.numeric
+
+#Número de vagas de garagem:
+dados$vagas <- gsub("[^[:digit:]]", "", dados$vagas) %>% as.numeric()
+
+#Quantidade de quartos:
+dados$quartos <-gsub("[^[:digit:]]", "", dados$quartos) %>% as.numeric()
+
+#Quantidade de suítes:
+dados$suites <- str_extract(dados$banheiros_suites, "\\d+(?= suíte)") %>% as.numeric()
+
+#Quantidade de banheiros:
+dados$banheiros <- str_extract(dados$banheiros_suites, "\\d+(?= banheiro)") %>% as.numeric()
+
+#O condompinio possui piscina? 1 = Sim, 0 = Não
+dados$piscina <-  +(grepl("Piscina | piscina", dados$descricao )) %>% as.factor()
+
+#O condomínio possui academia? 1 = Sim, 0 = Não
+dados$academia <- +(grepl("Academia | academia | Fitness | fitness", dados$descricao )) %>% as.factor
+
+#O condomínio possui quadra esportiva? 1 = Sim, 0 = Não
+dados$quadra <- +(grepl("Quadra | quadra ", dados$descricao )) %>% as.factor()
+
+#Valor Unitário:
+dados$unit <- dados$valor_total/dados$area_util
+
+################################################################################
+#                     Análise espacial e exploratória dos dados                #
+################################################################################
+
+#Acessando API do Google Maps para coletar coordenadas geográficas
+#de cada elemento. Mais informações de como obter a chave para acessar a API
+#em: https://mapsplatform.google.com/. O pacote ggmap também dá orientações 
+#de como obter e utilizar a API: https://search.r-project.org/CRAN/refmans/ggmap/html/register_google.html
+register_google(key = "cole aqui a sua chave API do Maps", write = TRUE) #chave pessoal
+
+#Removendo dados que não possuem endereço e, na sequência,
+#coletando as latitudes e longitudes:
+dados <- dados[complete.cases(dados$endereco),]
+dados <- mutate_geocode(dados, location = endereco, output = "latlona")
+
+#Removendo dados que não foram encontradas coordenadas:
+dados <- dados[complete.cases(dados$lon, dados$area_util),]
+
+#Renomeando e organizando algumas variáveis:
+dados_sp_pt <- dados %>% 
+  mutate(
+    id = (1:length(valor_total)),
+    id = as.character(id),
+    across(unit, round, digits = 2),
+    across(c(vagas,suites), replace_na, 0),
+    across(c(banheiros, quartos), replace_na, 1)) %>%
+  select(-c(5, 7, 18)) %>% 
+  select(id, valor_total, unit, everything(), -c(link, lat, lon, endereco), c(endereco, lat, lon, link ))
+
+#visualizando a base de dados
+dados_sp_pt %>%
+  head(n = 5) %>% 
+  kable() %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F,
+                font_size = 14)
+
+write.xlsx(dados_sp_pt[1:10,], "dados_sp_exemplo.xlsx")
+
+#Plotagem de histograma e correlações das variáveis quanti
+chart.Correlation(dados_sp_pt[, 2:9])
+
+#Salvando base para testes futuros
+write.xlsx(dados_sp_pt, "dados_sp.xlsx")
 
 #Transformando o dataset em um objeto simple feature:
 sf_dados_sp <- st_as_sf(x = dados_sp_pt, 
@@ -100,11 +268,8 @@ a <- tm_shape(shp = shp_long_lat) +
                          "Banheiros" = "banheiros", "Vagas:" = "vagas","Condomínio" = "condominio",  
                          "Piscina:" = "piscina", "Academia" = "academia", "Quadra" = "quadra")) +
   tm_layout(title= "Antes da intersecção")
-
-#Plotando o mapa
 a
-
-#Excluindo dados fora dos limites de São Paulo através
+#Excluindo dados que possam estar fora dos limites de São Paulo, através
 #de uma interseção dos dados com um shapefile do município:
 inter <- st_intersection(sf_dados_sp, sf_shp) %>% 
   sf::st_as_sf()
@@ -127,8 +292,6 @@ tmap_arrange(a,b)
 # Quantidade de dados que estavam fora dos limites de São Paulo:
 print(length(dados_sp_pt$id) - length(inter$id))
 
-#Boxplot da variável dependente "Valor Unitário/m²":
-
 # Calculando  medidas resumo para legenda
 media <- mean(dados_sp_pt$unit)
 mediana <- median(dados_sp_pt$unit)
@@ -147,11 +310,11 @@ texto_resumo <- paste0("Valor mínimo = R$ ", round(minimo, 2), "\n",
                        "3º quartil = R$ ", round(terceiro_quartil, 2), "\n",
                        "Valor Máximo = R$ ", round(maximo, 2), "\n",
                        "Quantidade de dados = ", quant_dados)
-                       
-                       
+
+#Boxplot da variável dependente "Valor Unitário/m²":                      
 box_unit <- ggplot(dados_sp_pt) +
   aes(x = "", y = unit) +
-  geom_boxplot(fill = "#0C4C8A") +
+  geom_boxplot(fill = "#A52A2A") +
   labs(y = "Valor Unitário (R$/m²)", 
        title = "Boxplot do Valor Unitário (R$/m²)") +
   coord_flip() +
@@ -159,7 +322,7 @@ box_unit <- ggplot(dados_sp_pt) +
   theme(plot.title = element_text(face = "bold", 
                                   hjust = 0.5),
         axis.title.x = element_text(face = "bold")) +
-  scale_y_continuous(limits = c(0, 125000), breaks = seq(0, 125000, by = 10000)) +
+  scale_y_continuous(limits = c(0, 125000), breaks = seq(0, 125000, by = 20000)) +
   annotate("text", x = 1.3, y = 90000, label = texto_resumo)        
 
 #Histograma dos valores unitários:
@@ -183,13 +346,12 @@ summary(dados_sp_pt$unit)
 ggplotly(hist_unit)
 ggplotly(box_unit)
 
-
 #Os possíveis outliers poderão ser removidos, desde que devidamente justificado, conforme
 #previsto na NBR 14653-2. É pertinente também que sejam tratados com base em literatura 
 #subjacente. No caso, foi criada uma função que elimina os chamados outliers extremos 
 #da variável resposta, ou seja Valor unitário > Q3 + 3 * AIQ. 
 
-#Função para detectar outliers extremos na variável dependente "valor unitário, que 
+#Função para detectar outliers extremos na variável, que 
 #são quaisquer valores situados abaixo de Q1 ou acima de Q3 por 
 #mais 3 vezes a amplitude interquartil.
 outliers_extreme = function(x){
@@ -207,9 +369,7 @@ remove_outliers <- function(inter, cols = names(inter)) {
 inter <- inter %>% remove_outliers(col = 3) %>% st_as_sf(coords = c("lon", "lat"), 
                                                          crs = "+proj=longlat")
 
-#Novo Boxplot dos valores unitários
-
-# Calculando  medidas resumo para legenda
+# Calculando as novas medidas resumo para legenda
 media_inter <- mean(inter$unit)
 mediana_inter <- median(inter$unit)
 primeiro_quartil_inter <- quantile(inter$unit, 0.25)
@@ -219,15 +379,16 @@ maximo_inter <- max(inter$unit)
 quant_dados_inter <- length(inter$unit)
 
 
-# Cria a string com os valores resumo
+# Criando a string com os valores resumo
 texto_resumo_inter <- paste0("Valor mínimo = R$ ", round(minimo_inter, 2), "\n",
-                       "1º quartil = R$ ", round(primeiro_quartil_inter, 2), "\n",
-                       "Mediana = R$ ", round(mediana_inter, 2), "\n",
-                       "Média = R$ ", round(media_inter, 2), "\n",
-                       "3º quartil = R$ ", round(terceiro_quartil_inter, 2), "\n",
-                       "Valor Máximo = R$ ", round(maximo_inter, 2), "\n",
-                       "Quantidade de dados = ", quant_dados_inter)
+                             "1º quartil = R$ ", round(primeiro_quartil_inter, 2), "\n",
+                             "Mediana = R$ ", round(mediana_inter, 2), "\n",
+                             "Média = R$ ", round(media_inter, 2), "\n",
+                             "3º quartil = R$ ", round(terceiro_quartil_inter, 2), "\n",
+                             "Valor Máximo = R$ ", round(maximo_inter, 2), "\n",
+                             "Quantidade de dados = ", quant_dados_inter)
 
+#Novo Boxplot dos valores unitários
 box_unit_out <- ggplot(inter) +
   aes(x = "", y = unit) +
   geom_boxplot(fill = "#0C4C8A") +
@@ -258,9 +419,16 @@ hist_unit_out <-  ggplot(inter) +
     axis.title.x = element_text(face = "bold")
   )
 
-plot_grid(box_unit_out, hist_unit_out, labels = "AUTO")
+#Comparação dos boxplots
+plot_grid(box_unit, box_unit_out, labels = "AUTO")
 
-#Calculando a média dos valores unitários por bairro:
+#Após a eliminação, nota-se que os dados ficaram com distribuição mais próxima à normal. 
+#É possível que os valores excluídos sejam de fato dados de mercado, porém, conforme NBR 14653-2,
+#é pertinente que esse mercado seja tratado em modelos com amostra formada por dados mais 
+#semelhantes, nesse caso por imóveis de altíssimo padrão. 
+
+#Calculando a média por bairro, tendo por objetivo verificar o grau de 
+#associação espacial dos dados (Índice de Moran):
 mean_bairro <- inter[,c(3,18)] %>% group_by(NOME_DIST) %>% 
   summarise(media = mean(unit)) %>% rename(NOME_DIST = 1) %>% 
   as.tibble() %>% select(1:2)
@@ -324,9 +492,9 @@ inter_mean <- inter_mean %>% rename(bairro = 18,
 
 #BoxPlot por região da cidade
 ggplotly(ggplot(data = inter_mean, mapping = aes(x = zona, y = unit)) +
-  geom_boxplot(fill = "#0C4C8A") +
-  labs(y = "Valor Unitário (R$/m²)", 
-       title = "Boxplot do Valor Unitário (R$/m²) por região"))
+           geom_boxplot(fill = "#0C4C8A") +
+           labs(y = "Valor Unitário (R$/m²)", 
+                title = "Boxplot do Valor Unitário (R$/m²) por região"))
 
 #Os 5 bairros com maiores e menores valor unitários médios em oferta
 df_ordenado <- sf_shp[, c(4,12,10)] %>% st_drop_geometry() 
@@ -338,22 +506,18 @@ df_tops <- rbind(top_5, bottom_5)
 
 #Plotando os resultados
 
-ggplot(df_tops, aes(x = reorder(NOME_DIST, -media), y = media, fill = zona)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  geom_label(aes(x= NOME_DIST, label = round(media,0)),
-             show.legend = F,
-             fill = "white") +
+ggplot(df_tops, aes(x = reorder(NOME_DIST, -media), y = media,fill = zona, label = round(media))) +
+  geom_bar(stat = "identity", position = "dodge",) +
+  geom_text(size = 5, position = position_stack(vjust = 1.04)) +
   labs(title = "Bairros com os maiores e menores valores unitários médios por m² em São Paulo", 
        x = "Bairro", y = "Valor Unitário (R$/m²)", fill = "Região")
 
-#Mapas: 
-  
+
 #Unitário
 unit_plot <- tm_shape(shp = sf_shp) + 
   tm_borders(alpha = 0.4) +
-  tm_text("NOME_DIST", size = 0.3) +
   tm_fill(col = "media",
-          title = "Valor Unitário médio (R$/m²)",alpha = 0.9,
+          title = "Valor Unitário médio (R$/m²)",alpha = 0.7,
           popup.vars = c("Bairro" = "NOME_DIST", 
                          "Média do bairro" = "media",
                          "Dados no bairro" = "count",
@@ -438,11 +602,9 @@ vars %>%
             diag.type = "density",
             col.diag = "#440154FF",
             pan.spacing = 0,
-            lab.position = "bl",)
+            lab.position = "bl")
 
-###############################################################################
-#              Cálculo das distâncias para estações do metrô                  #
-###############################################################################
+#Cálculo das distâncias para estações do metrô
 
 #objeto simple feature dos dados em utm
 sf_aptos_utm <- inter_mean %>% st_transform(CRS("+init=epsg:22523"))
@@ -521,94 +683,89 @@ sf_aptos_geod <- sf_aptos_utm %>% st_transform(CRS("+proj=longlat"))
 
 #Geral
 dist_geral <- ggplot(sf_aptos_geod) +
-    geom_point(aes(x = dist, y = unit), size = 1.5, 
-               colour = "#1A5276") +
-    geom_smooth(aes(x = dist, y = unit),
-                method = "lm", formula = y ~ log(x), se = F, size = 0.5, legend = F) +
-    labs(x = "Distância ao metrô (m)", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 14L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold", size = 12), 
-          axis.title.x = element_text(face = "bold", size = 12))
+  geom_point(aes(x = dist, y = unit), size = 1.5, 
+             colour = "#1A5276") +
+  geom_smooth(aes(x = dist, y = unit),
+              method = "lm", formula = y ~ log(x), se = F, size = 0.5, legend = F) +
+  labs(x = "Distância ao metrô (m)", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Visão geral") +
+  theme_light() +
+  theme(plot.title = element_text(size = 18L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold", size = 16), 
+        axis.title.x = element_text(face = "bold", size = 16)) +
+  scale_x_continuous(limits = c(0, 35000), breaks = seq(0, 35000, by = 5000))
 
 
 #Linha azul
 linha_azul <- ggplot(sf_aptos_geod %>% filter(sf_aptos_geod$linha_prox == "AZUL")) +
-    geom_point(aes(x = dist, y = unit), size = 1.5, 
-               colour = "#0C4C8A") +
-    geom_smooth(aes(x = dist, y = unit),
-                method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
-    labs(x = "Distância ao metrô", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
-          axis.title.x = element_text(face = "bold"))
+  geom_point(aes(x = dist, y = unit), size = 1.5, 
+             colour = "#0C4C8A") +
+  geom_smooth(aes(x = dist, y = unit),
+              method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
+  labs(x = "Distância ao metrô", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Linha Azul") +
+  theme_light() +
+  theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "bold"))
 
 
 #Linha amarela
 linha_amarela <- ggplot(sf_aptos_geod %>% filter(sf_aptos_geod$linha_prox == "AMARELA")) +
-    geom_point(aes(x = dist, y = unit), size = 1.5, 
-               colour = "#0C4C8A") +
-    geom_smooth(aes(x = dist, y = unit),
-                method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
-    labs(x = "Distância ao metrô", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
-          axis.title.x = element_text(face = "bold"))
+  geom_point(aes(x = dist, y = unit), size = 1.5, 
+             colour = "#0C4C8A") +
+  geom_smooth(aes(x = dist, y = unit),
+              method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
+  labs(x = "Distância ao metrô", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Linha Amarela") +
+  theme_light() +
+  theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "bold"))
 
 
 #Linha vermelha
 linha_vermelha <- ggplot(sf_aptos_geod %>% filter(sf_aptos_geod$linha_prox == "VERMELHA")) +
-    geom_point(aes(x = dist, y = unit), size = 1.5, 
-               colour = "#0C4C8A") +
-    geom_smooth(aes(x = dist, y = unit),
-                method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
-    labs(x = "Distância ao metrô", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
-          axis.title.x = element_text(face = "bold"))
+  geom_point(aes(x = dist, y = unit), size = 1.5, 
+             colour = "#0C4C8A") +
+  geom_smooth(aes(x = dist, y = unit),
+              method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
+  labs(x = "Distância ao metrô", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Linha Vermelha") +
+  theme_light() +
+  theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "bold"))
 
 
 #Linha verde
 linha_verde <- ggplot(sf_aptos_geod %>% filter(sf_aptos_geod$linha_prox == "VERDE")) +
-    geom_point(aes(x = dist, y = unit), size = 1.5, 
-               colour = "#0C4C8A") +
-    geom_smooth(aes(x = dist, y = unit),
-                method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
-    labs(x = "Distância ao metrô", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
-          axis.title.x = element_text(face = "bold"))
+  geom_point(aes(x = dist, y = unit), size = 1.5, 
+             colour = "#0C4C8A") +
+  geom_smooth(aes(x = dist, y = unit),
+              method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
+  labs(x = "Distância ao metrô", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Linha Verde") +
+  theme_light() +
+  theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "bold"))
 
 
 #Linha lilás
 linha_lilas <- ggplot(sf_aptos_geod %>% filter(sf_aptos_geod$linha_prox == "LILAS")) +
-    aes(x = dist, y = unit) +
-    geom_point(size = 1.5, 
-               colour = "#0C4C8A") +
-    geom_smooth(aes(x = dist, y = unit),
+  aes(x = dist, y = unit) +
+  geom_point(size = 1.5, 
+             colour = "#0C4C8A") +
+  geom_smooth(aes(x = dist, y = unit),
               method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) +
-    labs(x = "Distância ao metrô", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
-          axis.title.x = element_text(face = "bold"))
+  labs(x = "Distância ao metrô", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Linha Lilás") +
+  theme_light() +
+  theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "bold"))
 
 
 #Linha prata
 linha_prata <- ggplot(sf_aptos_geod %>% filter(sf_aptos_geod$linha_prox == "PRATA")) +
-    aes(x = dist, y = unit) +
-    geom_point(size = 1.5, 
-               colour = "#0C4C8A") +
-    geom_smooth(aes(x = dist, y = unit),
-              method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) + 
-    labs(x = "Distância ao metrô", y = "Unitário (R$/m²)") +
-    theme_light() +
-    theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
-          axis.title.x = element_text(face = "bold"))
-
-plot_grid(dist_geral, linha_amarela, linha_azul, linha_verde, linha_lilas, linha_vermelha, linha_prata, 
-          labels = c("Dist. geral", "Linha Amarela", "Linha Azul",
-                     "Linha Verde", "Linha Lilás", "Linha Vermelha","Linha Prata"),
-          label_size = 10,
-          ncol = 3, nrow = 3)
+  aes(x = dist, y = unit) +
+  geom_point(size = 1.5, 
+             colour = "#0C4C8A") +
+  geom_smooth(aes(x = dist, y = unit),
+              method = "lm", formula = y ~ x, se = F, size = 0.5, legend = F) 
+labs(x = "Distância ao metrô", y = "Unitário (R$/m²)", title = "Distância metrô x Valor Unitário (R$/m²) - Linha Prata") +
+  theme_light() +
+  theme(plot.title = element_text(size = 16L, face = "bold", hjust = 0.5), axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "bold"))
 
 #Plotando com os pontos das estações
 tmap_mode("view")
@@ -642,6 +799,29 @@ tm_shape(shp = sf_shp) +
           title = "Linha do metrô",
           popup.vars = c("Linha" = "emt_linha", 
                          "Estação" = "emt_nome")) 
+
+
+#Distribuições das variáveis, scatters, valores das correlações e suas
+#respectivas significâncias:
+df_auxiliar <- as.data.frame(inter_mean)
+chart.Correlation(df_auxiliar[2:9], histogram = TRUE)
+
+#Frequência de dados por distrito
+freq_bairros <- table(df_auxiliar$NOME_DIST)
+freq_bairros <- freq_bairros[order(freq_bairros, decreasing = TRUE)]
+freq_bairros %>%
+  kable() %>%
+  kable_styling(bootstrap_options = "striped", 
+                full_width = F, 
+                font_size = 16)
+
+#data frame aptos em utm
+dados_wgs <- sf_aptos_geod %>% 
+  dplyr::mutate(lat = sf::st_coordinates(.)[,2],
+                lon = sf::st_coordinates(.)[,1]) %>% st_drop_geometry()
+
+#Salvando base para testes futuros
+write.xlsx(dados_wgs, "dados_wgs.xlsx")
 
 ###############################################################################
 #    Diagnóstico de Autocorrelação Espacial Global - Estatística I de Moran   #                         #
@@ -729,3 +909,319 @@ ggplotly(
     annotate("text", x = 14000, y = 3000, label = "High-Low", col = "#0C4C8A") +
     theme_grey()
 ) 
+
+
+###############################################################################
+#                     Análise de Regressão múltipla                           #
+###############################################################################
+
+#Transformando em data frame para iniciar modelo de regressão
+base_regre_total <- sf_aptos_geod %>%
+  dplyr::mutate(lat = sf::st_coordinates(.)[,2],
+                lon = sf::st_coordinates(.)[,1]) %>% st_drop_geometry() 
+
+#Removendo colunas não utilizadas
+base_regre_total <- as.data.frame((na.omit(base_regre_total[c(2:12,16,18:21,24)])))
+
+#Removendo elemento com quantidade improvável de vagas de garagem
+base_regre_total <- base_regre_total %>% filter(vagas < 39)
+
+#Transformando todas as colunas em numéricas
+base_regre_total[] <- lapply(base_regre_total, function(x) {
+  if(is.factor(x)) as.numeric(as.character(x)) else x
+})
+
+#Regressão linear múltipla:
+aptos_model_total <- lm(formula = unit~. -valor_total -media_bairro,  base_regre_total)
+summary(aptos_model_total)
+
+################################################################################
+#                            PROCEDIMENTO STEPWISE                             #
+################################################################################
+
+#Aplicando o procedimento Stepwise, temos o seguinte código:
+step_aptos_total <- step(aptos_model_total, k = 3.841459)
+summary(step_aptos_total)
+
+#Teste de Shapiro-Francia
+sf.test(step_aptos_total$residuals)
+
+#Plotando os resíduos do modelo step_empresas
+residuos_total <- base_regre_total %>%
+  mutate(residuos = step_aptos_total$residuals) %>%
+  ggplot(aes(x = residuos)) +
+  geom_histogram(aes(y = ..density..), 
+                 color = "white", 
+                 fill = "#440154FF", 
+                 bins = 30,
+                 alpha = 0.6) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(step_aptos_total$residuals),
+                            sd = sd(step_aptos_total$residuals)),
+                size = 2, color = "grey30") +
+  scale_color_manual(values = "grey50") +
+  labs(x = "Resíduos",
+       y = "Frequência") +
+  ggtitle("Resíduos do modelo inicial")
+theme_bw()
+
+##############################################################################
+#                         BOX-COX                                            #
+##############################################################################
+
+#Para calcular o lambda de Box-Cox
+lambda_BC <- powerTransform(base_regre_total$unit)
+lambda_BC
+
+#Inserindo o lambda de Box-Cox na nova base de dados para a estimação de um
+#novo modelo
+base_regre_total$bcunit <- (((base_regre_total$unit ^ lambda_BC$lambda) - 1) / 
+                              lambda_BC$lambda)
+
+#Gerando novo modelo
+aptos_model_total_bc <- lm(formula = bcunit~. -valor_total -media_bairro -unit,  base_regre_total)
+summary(aptos_model_total_bc)
+
+#Aplicando procedimento stepwise
+aptos_model_total_bc_step <- step(aptos_model_total_bc)
+summary(aptos_model_total_bc_step)
+
+#Teste de Shapiro-Francia
+sf.test(aptos_model_total_bc_step$residuals)
+
+#Plotando os resíduos do modelo aptos_model_total_bc_step
+residuos_total_bc <- base_regre_total %>%
+  mutate(residuos = aptos_model_total_bc_step$residuals) %>%
+  ggplot(aes(x = residuos)) +
+  geom_histogram(aes(y = ..density..), 
+                 color = "white", 
+                 fill = "#440154FF", 
+                 bins = 30,
+                 alpha = 0.6) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(aptos_model_total_bc_step$residuals),
+                            sd = sd(aptos_model_total_bc_step$residuals)),
+                size = 2, color = "grey30") +
+  scale_color_manual(values = "grey50") +
+  labs(x = "Resíduos",
+       y = "Frequência") +
+  ggtitle("Resíduos após Box-cox")
+theme_bw()
+
+#Comparação dos resíduos plotados
+grid.arrange(residuos_total,residuos_total_bc)
+
+#Valores observados x Valores calculados
+ggplotly(ggplot(base_regre_total, aes(x = aptos_model_total_bc_step$fitted.values, y = unit)) + geom_point() + geom_smooth(method = "lm"))
+
+#Diagnóstico do modelo
+par(mfrow = c(2,2))
+plot(aptos_model_total_bc_step, which=c(1:4), pch = 20)
+
+#Multicolinearidade
+#NIHIL
+
+#Teste de Breush-Pagan
+#NIHIL
+
+#############################################################################
+#                     Modelo por bairros contíguos                          #                     
+#############################################################################
+
+grupos <- list()
+
+# loop pelas colunas da matriz
+for (i in 1:ncol(matrizW_queen)) {
+  # obter o nome da coluna
+  nome_coluna <- colnames(matrizW_queen)[i]
+  # obter os índices dos elementos iguais a 1 na coluna
+  indices <- which(matrizW_queen[, i] == 1)
+  # adicionar os índices à lista de grupos, com o nome da coluna como chave
+  grupos[[nome_coluna]] <- indices
+}
+
+#Analisando os bairros que fazem fronteira com o distrito da Saúde
+grupos$SAUDE
+
+#Data frame com os dados dos bairros da Saúde e seus vizinhos 
+base_regre_saude <- sf_aptos_geod %>%
+  filter(bairro == "CAMPO BELO"|
+           bairro == "MOEMA"|
+           bairro == "CURSINO"|
+           bairro == "SAUDE"|
+           bairro == "JABAQUARA"|
+           bairro == "VILA MARIANA") %>% 
+  dplyr::mutate(lat = sf::st_coordinates(.)[,2],
+                lon = sf::st_coordinates(.)[,1]) %>% st_drop_geometry() 
+
+summary(base_regre_saude)
+
+#visualizando bairros selecionados
+
+tm_shape(shp = sf_shp %>% filter(NOME_DIST == "campo-belo"|
+                                   NOME_DIST == "moema"|
+                                   NOME_DIST == "cursino"|
+                                   NOME_DIST == "saude"|
+                                   NOME_DIST == "jabaquara"|
+                                   NOME_DIST == "vila-mariana")) + 
+  tm_borders(alpha = 0.4) +
+  tm_text("NOME_DIST", size = 0.8) +
+  tm_fill(col = "media",
+          title = "Valor Unitário médio (R$/m²)",alpha = 0.9,
+          popup.vars = c("Bairro" = "NOME_DIST", 
+                         "Média do bairro" = "media",
+                         "Dados no bairro" = "count",
+                         "Média do IDH do bairro" = "media_idh",
+                         "Média índice Gini" = "media_gini",
+                         "Renda per capita média" = "renda_percapita",
+                         "Expectativa de vida média do bairro" = "expectativa")) +
+  tm_shape(shp = sf_shp) + 
+  tm_borders(alpha = 1)
+
+
+#Removendo colunas não utilizadas
+base_regre_saude <- as.data.frame((na.omit(base_regre_saude[c(2:12,16,18:21,24)])))
+
+#Resumo da base
+summary(base_regre_saude)
+
+#Transformando todas as colunas em numéricas
+base_regre_saude[] <- lapply(base_regre_saude, function(x) {
+  if(is.factor(x)) as.numeric(as.character(x)) else x
+})
+
+#Regressão linear múltipla:
+aptos_model_saude <- lm(formula = unit~. -valor_total -media_bairro,  base_regre_saude)
+summary(aptos_model_saude)
+
+################################################################################
+#                            PROCEDIMENTO STEPWISE                             #
+################################################################################
+
+#Aplicando o procedimento Stepwise, temos o seguinte código:
+step_aptos_saude <- step(aptos_model_saude, k = 3.841459)
+summary(step_aptos_saude)
+
+#Teste de Shapiro-Francia
+sf.test(step_aptos_saude$residuals)
+
+#Plotando os resíduos do modelo step_empresas
+residuos_saude <- base_regre_saude %>%
+  mutate(residuos = step_aptos_saude$residuals) %>%
+  ggplot(aes(x = residuos)) +
+  geom_histogram(aes(y = ..density..), 
+                 color = "white", 
+                 fill = "#440154FF", 
+                 bins = 30,
+                 alpha = 0.6) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(step_aptos_saude$residuals),
+                            sd = sd(step_aptos_saude$residuals)),
+                size = 2, color = "grey30") +
+  scale_color_manual(values = "grey50") +
+  labs(x = "Resíduos",
+       y = "Frequência") +
+  ggtitle("Resíduos do modelo inicial") +
+  theme_bw()
+
+##############################################################################
+#                         BOX-COX                                            #
+##############################################################################
+
+#Para calcular o lambda de Box-Cox
+lambda_BC_saude <- powerTransform(base_regre_saude$unit)
+lambda_BC_saude$lambda
+
+#Inserindo o lambda de Box-Cox na nova base de dados para a estimação de um
+#novo modelo
+base_regre_saude$bcunit <- (((base_regre_saude$unit ^ lambda_BC_saude$lambda) - 1) / 
+                              lambda_BC_saude$lambda)
+
+#Gerando novo modelo
+aptos_model_saude_bc <- lm(formula = bcunit~. -valor_total -unit -media_bairro,  base_regre_saude)
+summary(aptos_model_saude_bc)
+
+#Apliando procedimento stepwise
+aptos_model_saude_bc_step <- step(aptos_model_saude_bc)
+summary(aptos_model_saude_bc_step)
+
+#Teste de Shapiro-Francia
+sf.test(aptos_model_saude_bc_step$residuals)
+
+#Multicolinearidade
+ols_vif_tol(aptos_model_saude_bc_step)
+
+#Removendo a variável "media_idh" devido a multicolinearidade (Tolerance próximo a 0 e VIF elevado)
+aptos_model_saude_bc <- lm(formula = bcunit~. -valor_total -media_bairro -unit -media_idh,  base_regre_saude)
+summary(aptos_model_saude_bc)
+
+#Aplicando procedimento stepwise após remover media_idh
+aptos_model_saude_bc_step <- step(aptos_model_saude_bc)
+summary(aptos_model_saude_bc_step)
+
+#Teste de Shapiro-Francia após remover media_idh
+sf.test(aptos_model_saude_bc_step$residuals)
+
+#Multicolinearidade após remover media_idh
+ols_vif_tol(aptos_model_saude_bc_step)
+
+#Teste de Breush-Pagan para diagnóstico de heterocedasticidade
+ols_test_breusch_pagan(aptos_model_saude_bc_step)
+
+#Diagnóstico do modelo
+par(mfrow = c(2,2))
+plot(aptos_model_saude_bc_step, which=c(1:4), pch = 20)
+
+#Inserindo os valores preditos na base original 
+base_regre_saude$yhat_step_saude_bc <- (((aptos_model_saude_bc_step$fitted.values*(lambda_BC_saude$lambda))+
+                                           1))^(1/(lambda_BC_saude$lambda))
+
+#Valores observados x Valores calculados
+ggplotly(ggplot(base_regre_saude, aes(x = unit, y = yhat_step_saude_bc)) + 
+           geom_point() + geom_smooth(method = "lm"))
+
+
+#Ajustes dos modelos: valores previstos (fitted values) X valores reais
+base_regre_saude %>%
+  ggplot() +
+  geom_smooth(aes(x = unit, y = yhat_step_saude_bc, color = "Stepwise Box-Cox - bairro Saúde, São Paulo - SP"),
+              method = "lm", se = F, formula = y ~ splines::bs(x, df = 5), size = 1.5) +
+  geom_point(aes(x = unit, y = yhat_step_saude_bc),
+             color = "#440154FF", alpha = 0.6, size = 2) +
+  geom_smooth(aes(x = unit, y = unit), method = "lm", formula = y ~ x,
+              color = "grey30", size = 1.05,
+              linetype = "longdash") +
+  scale_color_manual("Modelo:", 
+                     values = c("#287D8EFF", "#440154FF")) +
+  labs(x = "Valores unitários observados (R$/m²)", y = "Valores previstos (R$/m²)") +
+  theme(panel.background = element_rect("white"),
+        panel.grid = element_line("grey95"),
+        panel.border = element_rect(NA),
+        legend.position = "bottom") +
+  theme_light()
+
+
+#Plotando os resíduos do modelo aptos_model_total_bc_step
+residuos_saude_bc_step <- base_regre_saude %>%
+  mutate(residuos = aptos_model_saude_bc_step$residuals) %>%
+  ggplot(aes(x = residuos)) +
+  geom_histogram(aes(y = ..density..), 
+                 color = "white", 
+                 fill = "#440154FF", 
+                 bins = 30,
+                 alpha = 0.6) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(aptos_model_saude_bc_step$residuals),
+                            sd = sd(aptos_model_saude_bc_step$residuals)),
+                size = 2, color = "grey30") +
+  scale_color_manual(values = "grey50") +
+  labs(x = "Resíduos",
+       y = "Frequência") +
+  ggtitle("Resíduos após Box-cox") +
+  theme_bw()
+
+#Comparação dos resíduos plotados
+grid.arrange(residuos_saude,residuos_saude_bc_step)
+
+#Alfa e Betas do modelo final:
+aptos_model_saude_bc_step$coefficients
